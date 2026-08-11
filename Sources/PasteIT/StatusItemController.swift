@@ -6,7 +6,7 @@ final class StatusItemController: NSObject {
 
     func install() {
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Paste.IT")
+            button.image = MenuBarIconProvider.icon()
         }
 
         let menu = NSMenu()
