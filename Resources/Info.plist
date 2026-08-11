@@ -22,8 +22,6 @@
     <true/>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>Paste.IT sends synthetic key events to copy the selected text and type it back out at your cursor.</string>
     <key>NSServices</key>
     <array>
         <dict>

@@ -70,6 +70,69 @@ executable directly, so it won't show the custom icon or Info.plist
 metadata — those only apply to the `.app` produced by `build_app.sh`. Use
 Option A for quick iteration, Option B for the real installable app.
 
+## Distributing outside your own Mac (code signing & notarization)
+
+An ad-hoc signed build (the default) only runs on the Mac that built it —
+Gatekeeper blocks it everywhere else with an "unidentified developer"
+warning. To hand `Paste.IT.app` to someone else, you need Apple to sign
+off on it via a **Developer ID** certificate and **notarization**. This is
+also the relevant step for the SOC 2 / compliance conversation: it proves
+the binary a customer runs is exactly the one you built, untampered.
+
+**1. Enroll in the Apple Developer Program** (if you haven't already) —
+[developer.apple.com/programs](https://developer.apple.com/programs/),
+$99/year, tied to your Apple ID.
+
+**2. Create a "Developer ID Application" certificate** — this is the
+certificate type for software distributed outside the Mac App Store
+(different from the "Apple Development" certificate used for testing).
+Easiest path:
+   - Open Xcode > Settings > Accounts, add your Apple ID if it's not there.
+   - Select your team, click **Manage Certificates…**, click **+**, choose
+     **Developer ID Application**. Xcode generates the key pair and
+     installs the certificate in your login keychain for you.
+   - (Manual alternative: Keychain Access > Certificate Assistant > Request
+     a Certificate From a Certificate Authority, upload the CSR at
+     [developer.apple.com/account/resources/certificates](https://developer.apple.com/account/resources/certificates/list),
+     download and double-click the issued certificate to install it.)
+
+**3. Find your Team ID** — developer.apple.com > Account > Membership
+details, a 10-character string like `A1B2C3D4E5`.
+
+**4. Find your exact signing identity string** — run:
+   ```sh
+   security find-identity -v -p codesigning
+   ```
+   Look for a line like `"Developer ID Application: Your Name (A1B2C3D4E5)"`
+   — that full string is what you'll pass as `DEVELOPER_ID_APPLICATION`.
+
+**5. Set up notarization credentials, once** — create an app-specific
+password at [appleid.apple.com](https://appleid.apple.com) (Sign-In and
+Security > App-Specific Passwords), then store it in your Keychain so it
+never needs to touch a script or the repo:
+   ```sh
+   xcrun notarytool store-credentials "PasteIT-Notary" \
+     --apple-id "you@example.com" \
+     --team-id "A1B2C3D4E5" \
+     --password "the-app-specific-password"
+   ```
+   (For CI/automation later, an App Store Connect API key is the more
+   robust option — App Store Connect > Users and Access > Integrations —
+   but an app-specific password is simplest for manual releases.)
+
+**6. Build, sign, and notarize:**
+   ```sh
+   DEVELOPER_ID_APPLICATION="Developer ID Application: Your Name (A1B2C3D4E5)" \
+     ./Scripts/build_app.sh
+   ./Scripts/notarize.sh
+   ```
+   `build_app.sh` signs with the hardened runtime enabled (required for
+   notarization); `notarize.sh` submits the build to Apple, waits for
+   approval, and staples the ticket so Gatekeeper accepts it even offline.
+
+Re-run both scripts for every release — the signing identity doesn't
+expire per-build, but Apple notarizes each binary individually.
+
 ## First run checklist
 
 1. Launch the app — a clipboard icon appears in the menu bar (no Dock icon).
@@ -102,6 +165,7 @@ Assets/AppIcon.iconset/        Source PNGs for the app icon (all required sizes)
 Assets/logo.png                1024x1024 logo, for docs/marketing use
 Scripts/generate_icons.py      Regenerates the icon + logo + menu bar glyph
 Scripts/build_app.sh           Builds a universal binary + packages Paste.IT.app
+Scripts/notarize.sh            Submits a Developer ID build to Apple for notarization
 PasteIT.entitlements           Sandbox-disabled entitlements
 ```
 
@@ -123,9 +187,8 @@ those into `AppIcon.icns` via `iconutil` (macOS only) as part of the build.
 
 - Default hotkey key-code table only covers letter keys — fine for the
   default C/V bindings, extend `KeyCodeNames` if you bind other keys.
-- Ad-hoc signing is fine for local use; distributing to other machines will
-  need a Developer ID certificate + notarization so Gatekeeper doesn't block
-  it, and so the Accessibility grant survives rebuilds.
+- Ad-hoc builds only run on the Mac that built them; see "Distributing
+  outside your own Mac" above for Developer ID signing + notarization.
 - The right-click "Copy.IT" Services entry may need to be enabled once under
   **System Settings > Keyboard > Keyboard Shortcuts > Services** the first
   time, depending on macOS version.
