@@ -17,16 +17,16 @@ final class ActionController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             guard pasteboard.changeCount != previousChangeCount,
                   let copied = pasteboard.string(forType: .string) else { return }
-            ClipboardStore.shared.set(copied)
+            ClipboardStore.shared.add(copied)
         }
     }
 
-    /// Types the stored text out at the current cursor location via
-    /// synthetic keystrokes instead of a system paste.
-    func performPaste() {
-        let text = ClipboardStore.shared.text
-        guard !text.isEmpty else { return }
-        KeystrokeTyper.type(text)
+    /// Types text out at the current cursor location via synthetic
+    /// keystrokes instead of a system paste. Defaults to the most recent
+    /// copy; pass a specific history entry to paste an older one.
+    func performPaste(_ text: String? = nil) {
+        guard let target = text ?? ClipboardStore.shared.history.first, !target.isEmpty else { return }
+        KeystrokeTyper.type(target)
     }
 
     private func simulateCommandKeystroke(virtualKey: CGKeyCode) {

@@ -10,6 +10,6 @@ final class ServiceProvider: NSObject {
             error.pointee = "Paste.IT: no text was selected." as NSString
             return
         }
-        ClipboardStore.shared.set(text)
+        ClipboardStore.shared.add(text)
     }
 }

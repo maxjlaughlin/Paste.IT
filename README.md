@@ -17,6 +17,11 @@ inside remote desktop sessions and VMs that don't sync the clipboard.
 - **Hotkeys**: optional global hotkeys for Copy and Paste, configurable in
   **Settings**. There's also a toggle to make Cmd+V / Cmd+Shift+V itself
   trigger a typed paste instead of the default combo.
+- **Recent Copies**: the menu bar icon has a **Recent Copies** submenu
+  listing up to the last 20 copies (most recent first); clicking any entry
+  types that one out. **Paste** (menu item or hotkey) always uses the most
+  recent copy. History is in memory only and is wiped when the app quits —
+  nothing is ever written to disk.
 
 ## Compatibility
 
@@ -30,7 +35,8 @@ merges them into one universal binary with `lipo`, so a single build of
 ## Security notes
 
 - 100% local. No network code, no analytics, no external dependencies.
-- The copied buffer lives in memory only and is cleared when the app quits.
+- Copy history (up to 20 entries) lives in memory only and is cleared when
+  the app quits — nothing is ever written to disk.
 - Built entirely on Apple's own frameworks (AppKit / Core Graphics) — nothing
   to install beyond Xcode's command line tools.
 - Requires the **Accessibility** permission, because that's what macOS
@@ -41,6 +47,18 @@ merges them into one universal binary with `lipo`, so a single build of
   incompatible with system-wide keystroke injection. This means it can't be
   distributed through the Mac App Store as-is, but is normal for this class
   of utility distributed directly (e.g. via GitHub Releases + notarization).
+
+## Using alongside other clipboard managers (e.g. CopyClip)
+
+Paste.IT's Copy action simulates Cmd+C, so whatever you copy also lands on
+the real system pasteboard as a side effect — other clipboard history tools
+like CopyClip will pick it up normally, no conflict there. The one setting
+to avoid combining with another clipboard manager is the **"Use ⌘V / ⌘⇧V to
+trigger typed paste"** override in Settings: when enabled it intercepts
+*every* Cmd+V system-wide, including synthetic ones other apps send (e.g.
+CopyClip pasting a selected history item), and replaces them with Paste.IT's
+own typed paste. Leave that toggle off and use Paste.IT's dedicated hotkey
+instead if you want both tools running side by side.
 
 ## Building
 
