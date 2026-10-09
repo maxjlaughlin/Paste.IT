@@ -23,9 +23,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         manager.start()
         hotkeyManager = manager
+
+        PasteboardWatcher.shared.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        PasteboardWatcher.shared.stop()
         hotkeyManager?.stop()
         ClipboardStore.shared.clear()
     }

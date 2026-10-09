@@ -10,6 +10,11 @@ inside remote desktop sessions and VMs that don't sync the clipboard.
   **Services > Copy.IT**, or click the menu bar icon and choose **Copy**.
   Either path simulates Cmd+C to capture the selection, then stores it in an
   in-memory buffer inside the app (nothing is written to disk).
+- **Any other copy also counts**: Paste.IT watches the system pasteboard in
+  the background, so a plain right-click **Copy**, an app's own **Edit >
+  Copy**, or any other app's copy shortcut is picked up automatically too —
+  you don't have to go through Copy.IT specifically for something to become
+  pasteable here.
 - **Paste**: click where you want the text, then click the menu bar icon and
   choose **Paste**. Paste.IT types the stored text out character by
   character using synthetic key events (`CGEvent`), so it works anywhere a
@@ -18,10 +23,11 @@ inside remote desktop sessions and VMs that don't sync the clipboard.
   **Settings**. There's also a toggle to make Cmd+V / Cmd+Shift+V itself
   trigger a typed paste instead of the default combo.
 - **Recent Copies**: the menu bar icon has a **Recent Copies** submenu
-  listing up to the last 20 copies (most recent first); clicking any entry
-  types that one out. **Paste** (menu item or hotkey) always uses the most
-  recent copy. History is in memory only and is wiped when the app quits —
-  nothing is ever written to disk.
+  listing up to the last 20 copies (most recent first); clicking an entry
+  makes it the current one (top of history, and on the system pasteboard)
+  without typing anything — **Paste** (menu item or hotkey) then uses it.
+  History is in memory only and is wiped when the app quits — nothing is
+  ever written to disk.
 
 ## Compatibility
 
