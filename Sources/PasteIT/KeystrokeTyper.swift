@@ -14,8 +14,41 @@ import Carbon
 /// ignores it, so a dummy code gets typed as whatever key that code actually
 /// is — on this app's events, key code 0, the "A" key.
 enum KeystrokeTyper {
+    private static let queue = DispatchQueue(label: "com.pasteit.keystroketyper")
+    private static let lock = NSLock()
+    private static var isTyping = false
+
+    /// Dispatches the actual typing to a background queue and returns
+    /// immediately. Typing a long string takes long enough (every event has
+    /// a small delay, and shifted characters need four) that running it
+    /// synchronously on the caller's thread — always the main thread here —
+    /// blocks that thread's run loop for the whole duration. HotkeyManager's
+    /// CGEventTap lives on that same run loop, and macOS disables a tap that
+    /// doesn't respond promptly; events that arrive while it's blocked also
+    /// queue up and can fire in a backlog once it's freed. Both looked like
+    /// intermittent "paste loops itself" or "the hotkey didn't fire" — worse
+    /// on long strings simply because they block longer.
+    ///
+    /// The lock also drops (rather than queuing) a second call that arrives
+    /// while one is already typing, so two triggers can never interleave
+    /// their keystrokes into each other.
     static func type(_ text: String, delayMicroseconds: UInt32 = 2_000) {
         guard !text.isEmpty else { return }
+
+        lock.lock()
+        guard !isTyping else { lock.unlock(); return }
+        isTyping = true
+        lock.unlock()
+
+        queue.async {
+            typeSynchronously(text, delayMicroseconds: delayMicroseconds)
+            lock.lock()
+            isTyping = false
+            lock.unlock()
+        }
+    }
+
+    private static func typeSynchronously(_ text: String, delayMicroseconds: UInt32) {
         let source = CGEventSource(stateID: .hidSystemState)
         let keyCodeMap = CurrentKeyboardLayout.characterKeyCodes()
 

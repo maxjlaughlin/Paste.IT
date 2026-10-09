@@ -32,11 +32,16 @@ final class ActionController {
     /// If nothing has been explicitly selected and the system pasteboard
     /// currently holds something Paste.IT can't type (most commonly an
     /// image from a screenshot-to-clipboard shortcut), this defers to a
-    /// real system paste instead of retyping whatever text came before it
-    /// — copying new text, or picking an older entry from Recent Copies,
-    /// switches it back to typing normally.
+    /// real system paste instead of retyping whatever text came before it.
+    /// Checked live against the pasteboard right here — not from
+    /// PasteboardWatcher's periodic poll, which could still be a tick
+    /// behind a screenshot taken just before Paste is triggered right after
+    /// it, and was the source of the screenshot-paste only "working ~75% of
+    /// the time". Copying new text, or picking an older entry from Recent
+    /// Copies, naturally switches this back to typing since both already
+    /// put real text on the pasteboard.
     func performPaste(_ text: String? = nil) {
-        if text == nil && !ClipboardStore.shared.currentCopyIsText {
+        if text == nil, NSPasteboard.general.string(forType: .string) == nil {
             simulateCommandKeystroke(virtualKey: 9) // 'v'
             return
         }
@@ -60,7 +65,10 @@ final class ActionController {
         let pasteboard = NSPasteboard.general
         let previousChangeCount = pasteboard.changeCount
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        // Gives the frontmost app time to actually finish its native copy
+        // before checking — too short a window here reads as an occasional
+        // "Copy silently did nothing" under system load or in slower apps.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             guard pasteboard.changeCount != previousChangeCount,
                   let copied = pasteboard.string(forType: .string) else { return }
             ClipboardStore.shared.add(copied)
