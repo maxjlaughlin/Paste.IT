@@ -19,6 +19,16 @@ enum KeystrokeTyper {
                 continue
             }
 
+            // Events from .hidSystemState otherwise inherit whatever modifier
+            // keys are physically still held down (e.g. the Cmd/Option the
+            // user is holding to trigger the paste hotkey itself), and macOS
+            // treats any keystroke carrying Cmd as a shortcut attempt instead
+            // of text input — silently swallowing the typed text instead of
+            // inserting it. Clearing flags makes every character a plain,
+            // unmodified keystroke regardless of what's really being held.
+            down.flags = []
+            up.flags = []
+
             down.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
             up.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
 

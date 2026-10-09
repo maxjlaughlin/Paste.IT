@@ -31,9 +31,12 @@ final class HotkeySettings {
     }
 
     // Defaults: Option+Cmd+C / Option+Cmd+V, chosen so they don't collide
-    // with the system's own Cmd+C / Cmd+V out of the box.
-    var copyHotkey = Hotkey(keyCode: 8, modifiers: CGEventFlags([.maskCommand, .maskAlternate]).rawValue, consumesEvent: false)
-    var pasteHotkey = Hotkey(keyCode: 9, modifiers: CGEventFlags([.maskCommand, .maskAlternate]).rawValue, consumesEvent: false)
+    // with the system's own Cmd+C / Cmd+V out of the box. consumesEvent is
+    // true because nothing legitimately binds these combos — letting the
+    // real keystroke pass through to the frontmost app (or a web page's own
+    // key handler) only risks it doing something unwanted alongside us.
+    var copyHotkey = Hotkey(keyCode: 8, modifiers: CGEventFlags([.maskCommand, .maskAlternate]).rawValue, consumesEvent: true)
+    var pasteHotkey = Hotkey(keyCode: 9, modifiers: CGEventFlags([.maskCommand, .maskAlternate]).rawValue, consumesEvent: true)
 
     private init() {
         load()
@@ -46,7 +49,7 @@ final class HotkeySettings {
     func useSystemPasteOverride(_ enabled: Bool) {
         pasteHotkey = enabled
             ? Hotkey(keyCode: 9, modifiers: CGEventFlags([.maskCommand]).rawValue, consumesEvent: true)
-            : Hotkey(keyCode: 9, modifiers: CGEventFlags([.maskCommand, .maskAlternate]).rawValue, consumesEvent: false)
+            : Hotkey(keyCode: 9, modifiers: CGEventFlags([.maskCommand, .maskAlternate]).rawValue, consumesEvent: true)
         save()
     }
 
@@ -59,7 +62,7 @@ final class HotkeySettings {
     func useSystemCopyOverride(_ enabled: Bool) {
         copyHotkey = enabled
             ? Hotkey(keyCode: 8, modifiers: CGEventFlags([.maskCommand]).rawValue, consumesEvent: false)
-            : Hotkey(keyCode: 8, modifiers: CGEventFlags([.maskCommand, .maskAlternate]).rawValue, consumesEvent: false)
+            : Hotkey(keyCode: 8, modifiers: CGEventFlags([.maskCommand, .maskAlternate]).rawValue, consumesEvent: true)
         save()
     }
 

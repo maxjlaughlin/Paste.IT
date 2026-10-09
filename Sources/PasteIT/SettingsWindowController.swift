@@ -24,13 +24,26 @@ final class SettingsWindowController: NSWindowController {
 
         copyRecorder.hotkey = HotkeySettings.shared.copyHotkey
         pasteRecorder.hotkey = HotkeySettings.shared.pasteHotkey
-        copyRecorder.onChange = { hotkey in
-            HotkeySettings.shared.copyHotkey = hotkey
+        copyRecorder.onChange = { [weak self] hotkey in
+            // Bare ⌘C must stay unconsumed no matter how it was recorded —
+            // that passthrough is what lets the frontmost app's native copy
+            // fire at all. Anything else should always be swallowed, since
+            // nothing legitimately binds a custom combo like Option+Cmd+C.
+            var updated = hotkey
+            updated.consumesEvent = !updated.isBareCommand(keyCode: 8)
+            HotkeySettings.shared.copyHotkey = updated
             HotkeySettings.shared.save()
+            self?.copyOverrideCheckbox.state = updated.isBareCommand(keyCode: 8) ? .on : .off
         }
-        pasteRecorder.onChange = { hotkey in
-            HotkeySettings.shared.pasteHotkey = hotkey
+        pasteRecorder.onChange = { [weak self] hotkey in
+            // Paste always types the text itself, so the real keystroke
+            // should always be swallowed — there's no case where letting it
+            // through to the frontmost app helps.
+            var updated = hotkey
+            updated.consumesEvent = true
+            HotkeySettings.shared.pasteHotkey = updated
             HotkeySettings.shared.save()
+            self?.pasteOverrideCheckbox.state = updated.isBareCommand(keyCode: 9) ? .on : .off
         }
 
         copyOverrideCheckbox.target = self
@@ -39,7 +52,7 @@ final class SettingsWindowController: NSWindowController {
 
         pasteOverrideCheckbox.target = self
         pasteOverrideCheckbox.action = #selector(pasteOverrideToggled)
-        pasteOverrideCheckbox.state = HotkeySettings.shared.pasteHotkey.consumesEvent ? .on : .off
+        pasteOverrideCheckbox.state = HotkeySettings.shared.pasteHotkey.isBareCommand(keyCode: 9) ? .on : .off
 
         let copyRow = NSStackView(views: [NSTextField(labelWithString: "Copy hotkey:"), copyRecorder])
         copyRow.orientation = .horizontal
