@@ -32,7 +32,7 @@ enum KeystrokeTyper {
     /// The lock also drops (rather than queuing) a second call that arrives
     /// while one is already typing, so two triggers can never interleave
     /// their keystrokes into each other.
-    static func type(_ text: String, delayMicroseconds: UInt32 = 2_000) {
+    static func type(_ text: String, delayMicroseconds: UInt32 = 5_000) {
         guard !text.isEmpty else { return }
 
         lock.lock()
@@ -51,6 +51,16 @@ enum KeystrokeTyper {
     private static func typeSynchronously(_ text: String, delayMicroseconds: UInt32) {
         let source = CGEventSource(stateID: .hidSystemState)
         let keyCodeMap = CurrentKeyboardLayout.characterKeyCodes()
+
+        // Give the destination a moment to finish settling whatever just
+        // happened right before Paste was triggered — usually a mouse click
+        // placing the cursor — before the first keystroke arrives. Native
+        // text fields handle this instantly, but a JS-based editor like
+        // Google Docs processes input through its own async model/view sync
+        // rather than a real text field, and can silently drop a burst of
+        // keystrokes that arrives before it's finished settling, which
+        // showed up as the front of a paste going missing.
+        usleep(200_000)
 
         for character in text {
             let mapped = keyCodeMap[character]
