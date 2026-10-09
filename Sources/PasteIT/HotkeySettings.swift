@@ -39,7 +39,7 @@ final class HotkeySettings {
     /// non-conflicting hotkey and leaves system Cmd+V alone.
     func useSystemPasteOverride(_ enabled: Bool) {
         pasteHotkey = enabled
-            ? Hotkey(keyCode: 9, modifiers: CGEventFlags(.maskCommand).rawValue, consumesEvent: true)
+            ? Hotkey(keyCode: 9, modifiers: CGEventFlags([.maskCommand]).rawValue, consumesEvent: true)
             : Hotkey(keyCode: 9, modifiers: CGEventFlags([.maskCommand, .maskAlternate]).rawValue, consumesEvent: false)
         save()
     }
