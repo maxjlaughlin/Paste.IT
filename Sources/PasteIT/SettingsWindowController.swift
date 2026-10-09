@@ -3,11 +3,12 @@ import Cocoa
 final class SettingsWindowController: NSWindowController {
     private let copyRecorder = HotkeyRecorderView(frame: NSRect(x: 0, y: 0, width: 100, height: 24))
     private let pasteRecorder = HotkeyRecorderView(frame: NSRect(x: 0, y: 0, width: 100, height: 24))
-    private let overrideCheckbox = NSButton(checkboxWithTitle: "Use ⌘V / ⌘⇧V to trigger typed paste", target: nil, action: nil)
+    private let copyOverrideCheckbox = NSButton(checkboxWithTitle: "Use ⌘C to capture copies", target: nil, action: nil)
+    private let pasteOverrideCheckbox = NSButton(checkboxWithTitle: "Use ⌘V / ⌘⇧V to trigger typed paste", target: nil, action: nil)
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 180),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 220),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -32,9 +33,13 @@ final class SettingsWindowController: NSWindowController {
             HotkeySettings.shared.save()
         }
 
-        overrideCheckbox.target = self
-        overrideCheckbox.action = #selector(overrideToggled)
-        overrideCheckbox.state = HotkeySettings.shared.pasteHotkey.consumesEvent ? .on : .off
+        copyOverrideCheckbox.target = self
+        copyOverrideCheckbox.action = #selector(copyOverrideToggled)
+        copyOverrideCheckbox.state = HotkeySettings.shared.copyHotkey.isBareCommand(keyCode: 8) ? .on : .off
+
+        pasteOverrideCheckbox.target = self
+        pasteOverrideCheckbox.action = #selector(pasteOverrideToggled)
+        pasteOverrideCheckbox.state = HotkeySettings.shared.pasteHotkey.consumesEvent ? .on : .off
 
         let copyRow = NSStackView(views: [NSTextField(labelWithString: "Copy hotkey:"), copyRecorder])
         copyRow.orientation = .horizontal
@@ -48,7 +53,7 @@ final class SettingsWindowController: NSWindowController {
         note.font = .systemFont(ofSize: 11)
         note.textColor = .secondaryLabelColor
 
-        let stack = NSStackView(views: [copyRow, pasteRow, overrideCheckbox, note])
+        let stack = NSStackView(views: [copyRow, copyOverrideCheckbox, pasteRow, pasteOverrideCheckbox, note])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -66,8 +71,13 @@ final class SettingsWindowController: NSWindowController {
         ])
     }
 
-    @objc private func overrideToggled() {
-        HotkeySettings.shared.useSystemPasteOverride(overrideCheckbox.state == .on)
+    @objc private func copyOverrideToggled() {
+        HotkeySettings.shared.useSystemCopyOverride(copyOverrideCheckbox.state == .on)
+        copyRecorder.hotkey = HotkeySettings.shared.copyHotkey
+    }
+
+    @objc private func pasteOverrideToggled() {
+        HotkeySettings.shared.useSystemPasteOverride(pasteOverrideCheckbox.state == .on)
         pasteRecorder.hotkey = HotkeySettings.shared.pasteHotkey
     }
 }

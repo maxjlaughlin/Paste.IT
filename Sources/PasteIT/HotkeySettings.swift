@@ -12,6 +12,12 @@ struct Hotkey: Codable, Equatable {
         let relevant: CGEventFlags = [.maskShift, .maskControl, .maskAlternate, .maskCommand]
         return flags.intersection(relevant) == CGEventFlags(rawValue: modifiers).intersection(relevant)
     }
+
+    /// True when this is just ⌘ + the given key with no other modifiers —
+    /// the same combo macOS itself binds to Edit > Copy / Edit > Paste.
+    func isBareCommand(keyCode code: UInt16) -> Bool {
+        keyCode == code && CGEventFlags(rawValue: modifiers) == .maskCommand
+    }
 }
 
 /// Persists hotkey choices locally via UserDefaults. Nothing here ever
@@ -41,6 +47,19 @@ final class HotkeySettings {
         pasteHotkey = enabled
             ? Hotkey(keyCode: 9, modifiers: CGEventFlags([.maskCommand]).rawValue, consumesEvent: true)
             : Hotkey(keyCode: 9, modifiers: CGEventFlags([.maskCommand, .maskAlternate]).rawValue, consumesEvent: false)
+        save()
+    }
+
+    /// Toggle for using plain Cmd+C as the Copy hotkey. The keystroke is
+    /// left unconsumed (consumesEvent: false) so the frontmost app still
+    /// does its own native copy — that's what actually puts the selection
+    /// on the pasteboard. Paste.IT just captures the result afterward
+    /// (ActionController.captureRealCopy) instead of re-simulating Cmd+C
+    /// itself, which would otherwise feed back into this same hotkey.
+    func useSystemCopyOverride(_ enabled: Bool) {
+        copyHotkey = enabled
+            ? Hotkey(keyCode: 8, modifiers: CGEventFlags([.maskCommand]).rawValue, consumesEvent: false)
+            : Hotkey(keyCode: 8, modifiers: CGEventFlags([.maskCommand, .maskAlternate]).rawValue, consumesEvent: false)
         save()
     }
 

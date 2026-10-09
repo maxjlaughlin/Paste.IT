@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let manager = HotkeyManager(
             settings: HotkeySettings.shared,
             onCopy: { ActionController.shared.performCopy() },
+            onNativeCopy: { ActionController.shared.captureRealCopy() },
             onPaste: { ActionController.shared.performPaste() }
         )
         manager.start()
