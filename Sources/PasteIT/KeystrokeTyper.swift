@@ -14,7 +14,7 @@ import Carbon
 /// ignores it, so a dummy code gets typed as whatever key that code actually
 /// is — on this app's events, key code 0, the "A" key.
 enum KeystrokeTyper {
-    static func type(_ text: String, delayMicroseconds: UInt32 = 1_500) {
+    static func type(_ text: String, delayMicroseconds: UInt32 = 2_000) {
         guard !text.isEmpty else { return }
         let source = CGEventSource(stateID: .hidSystemState)
         let keyCodeMap = CurrentKeyboardLayout.characterKeyCodes()
@@ -40,10 +40,10 @@ enum KeystrokeTyper {
                 // OS's own driver would, and ignores a flag with no
                 // corresponding keystroke — without this, shifted characters
                 // (capitals, $ % * etc.) arrive at the guest unshifted.
-                pressModifiers(modifiers, source: source)
-                down.post(tap: .cghidEventTap)
-                up.post(tap: .cghidEventTap)
-                releaseModifiers(modifiers, source: source)
+                pressModifiers(modifiers, source: source, delayMicroseconds: delayMicroseconds)
+                post(down, delayMicroseconds: delayMicroseconds)
+                post(up, delayMicroseconds: delayMicroseconds)
+                releaseModifiers(modifiers, source: source, delayMicroseconds: delayMicroseconds)
             } else {
                 // No key on the current layout produces this character (e.g.
                 // an emoji, or a script outside the keyboard layout) — fall
@@ -57,12 +57,23 @@ enum KeystrokeTyper {
                 down.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
                 up.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
 
-                down.post(tap: .cghidEventTap)
-                up.post(tap: .cghidEventTap)
+                post(down, delayMicroseconds: delayMicroseconds)
+                post(up, delayMicroseconds: delayMicroseconds)
             }
-
-            usleep(delayMicroseconds)
         }
+    }
+
+    /// Posts one event, then pauses before returning. A VM's virtualized
+    /// keyboard (hypervisor -> guest driver -> guest OS) has more
+    /// processing overhead per event than a native key press, so posting
+    /// events back-to-back with no gap causes it to drop or coalesce some
+    /// — most visible on shifted characters, which now involve four events
+    /// (modifier down, key down, key up, modifier up) instead of two.
+    /// Pacing every individual event, not just once per character, is what
+    /// actually fixes that instead of just making plain characters slower.
+    private static func post(_ event: CGEvent, delayMicroseconds: UInt32) {
+        event.post(tap: .cghidEventTap)
+        usleep(delayMicroseconds)
     }
 
     /// Presses whichever of Shift/Option this character needs, in that
@@ -71,33 +82,33 @@ enum KeystrokeTyper {
     /// down). Always built explicitly rather than inherited from ambient
     /// state, so a physically-held key elsewhere (e.g. the Cmd used to
     /// trigger the paste hotkey itself) never leaks onto these.
-    private static func pressModifiers(_ modifiers: CGEventFlags, source: CGEventSource?) {
+    private static func pressModifiers(_ modifiers: CGEventFlags, source: CGEventSource?, delayMicroseconds: UInt32) {
         if modifiers.contains(.maskShift) {
-            postModifierEvent(keyCode: CGKeyCode(kVK_Shift), keyDown: true, flags: .maskShift, source: source)
+            postModifierEvent(keyCode: CGKeyCode(kVK_Shift), keyDown: true, flags: .maskShift, source: source, delayMicroseconds: delayMicroseconds)
         }
         if modifiers.contains(.maskAlternate) {
             let held: CGEventFlags = modifiers.contains(.maskShift) ? [.maskShift, .maskAlternate] : .maskAlternate
-            postModifierEvent(keyCode: CGKeyCode(kVK_Option), keyDown: true, flags: held, source: source)
+            postModifierEvent(keyCode: CGKeyCode(kVK_Option), keyDown: true, flags: held, source: source, delayMicroseconds: delayMicroseconds)
         }
     }
 
     /// Releases in reverse order, each event's flags reflecting the state
     /// immediately after that release (matching how a real modifier keyUp
     /// reports itself).
-    private static func releaseModifiers(_ modifiers: CGEventFlags, source: CGEventSource?) {
+    private static func releaseModifiers(_ modifiers: CGEventFlags, source: CGEventSource?, delayMicroseconds: UInt32) {
         if modifiers.contains(.maskAlternate) {
             let stillHeld: CGEventFlags = modifiers.contains(.maskShift) ? .maskShift : []
-            postModifierEvent(keyCode: CGKeyCode(kVK_Option), keyDown: false, flags: stillHeld, source: source)
+            postModifierEvent(keyCode: CGKeyCode(kVK_Option), keyDown: false, flags: stillHeld, source: source, delayMicroseconds: delayMicroseconds)
         }
         if modifiers.contains(.maskShift) {
-            postModifierEvent(keyCode: CGKeyCode(kVK_Shift), keyDown: false, flags: [], source: source)
+            postModifierEvent(keyCode: CGKeyCode(kVK_Shift), keyDown: false, flags: [], source: source, delayMicroseconds: delayMicroseconds)
         }
     }
 
-    private static func postModifierEvent(keyCode: CGKeyCode, keyDown: Bool, flags: CGEventFlags, source: CGEventSource?) {
+    private static func postModifierEvent(keyCode: CGKeyCode, keyDown: Bool, flags: CGEventFlags, source: CGEventSource?, delayMicroseconds: UInt32) {
         guard let event = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: keyDown) else { return }
         event.flags = flags
-        event.post(tap: .cghidEventTap)
+        post(event, delayMicroseconds: delayMicroseconds)
     }
 }
 
