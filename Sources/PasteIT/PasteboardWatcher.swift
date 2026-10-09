@@ -38,7 +38,14 @@ final class PasteboardWatcher {
         guard pasteboard.changeCount != lastChangeCount else { return }
         lastChangeCount = pasteboard.changeCount
 
-        guard let text = pasteboard.string(forType: .string), !text.isEmpty else { return }
-        ClipboardStore.shared.add(text)
+        if let text = pasteboard.string(forType: .string), !text.isEmpty {
+            ClipboardStore.shared.add(text)
+        } else {
+            // Something was copied that isn't plain text — most commonly an
+            // image from a screenshot-to-clipboard shortcut (Cmd+Ctrl+Shift+4).
+            // Leave any earlier text history alone, but flag that the
+            // *current* clipboard content isn't something Paste.IT can type.
+            ClipboardStore.shared.markCurrentCopyAsNonText()
+        }
     }
 }

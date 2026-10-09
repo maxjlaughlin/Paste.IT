@@ -28,7 +28,18 @@ final class ActionController {
     /// Types text out at the current cursor location via synthetic
     /// keystrokes instead of a system paste. Defaults to the most recent
     /// copy; pass a specific history entry to paste an older one.
+    ///
+    /// If nothing has been explicitly selected and the system pasteboard
+    /// currently holds something Paste.IT can't type (most commonly an
+    /// image from a screenshot-to-clipboard shortcut), this defers to a
+    /// real system paste instead of retyping whatever text came before it
+    /// — copying new text, or picking an older entry from Recent Copies,
+    /// switches it back to typing normally.
     func performPaste(_ text: String? = nil) {
+        if text == nil && !ClipboardStore.shared.currentCopyIsText {
+            simulateCommandKeystroke(virtualKey: 9) // 'v'
+            return
+        }
         guard let target = text ?? ClipboardStore.shared.history.first, !target.isEmpty else { return }
         KeystrokeTyper.type(target)
     }
@@ -56,6 +67,12 @@ final class ActionController {
         }
     }
 
+    /// Used for both triggering a native Copy (virtualKey 8, 'c') and
+    /// falling back to a real native Paste (virtualKey 9, 'v') when the
+    /// pasteboard holds something that can't be typed. Only needs to work
+    /// against native Mac apps — if the frontmost app happens to be a VM
+    /// window, forwarding this into the guest isn't attempted; pasting a
+    /// screenshot there is a known, accepted limitation.
     private func simulateCommandKeystroke(virtualKey: CGKeyCode) {
         let source = CGEventSource(stateID: .hidSystemState)
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: true),
