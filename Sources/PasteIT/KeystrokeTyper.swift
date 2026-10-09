@@ -157,9 +157,47 @@ enum KeystrokeTyper {
 
 /// Maps characters to the (keyCode, modifier flags) that produce them on the
 /// current keyboard layout, by running every key + modifier combo through
-/// the same translation macOS itself uses (UCKeyTranslate).
+/// the same translation macOS itself uses (UCKeyTranslate). Cached — this is
+/// 512 UCKeyTranslate calls, and the layout essentially never changes
+/// mid-session, so rebuilding it on every single paste was pure waste.
+/// Invalidated only when the keyboard layout actually changes.
 private enum CurrentKeyboardLayout {
+    private static let lock = NSLock()
+    private static var cached: [Character: (CGKeyCode, CGEventFlags)]?
+    private static var isObservingLayoutChanges = false
+
     static func characterKeyCodes() -> [Character: (CGKeyCode, CGEventFlags)] {
+        installLayoutChangeObserverIfNeeded()
+
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached {
+            return cached
+        }
+        let map = buildMap()
+        cached = map
+        return map
+    }
+
+    private static func installLayoutChangeObserverIfNeeded() {
+        lock.lock()
+        let alreadyObserving = isObservingLayoutChanges
+        isObservingLayoutChanges = true
+        lock.unlock()
+        guard !alreadyObserving else { return }
+
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChangedNotification as String),
+            object: nil,
+            queue: nil
+        ) { _ in
+            lock.lock()
+            cached = nil
+            lock.unlock()
+        }
+    }
+
+    private static func buildMap() -> [Character: (CGKeyCode, CGEventFlags)] {
         guard let inputSource = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
               let layoutDataPtr = TISGetInputSourceProperty(inputSource, kTISPropertyUnicodeKeyLayoutData) else {
             return [:]
