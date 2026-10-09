@@ -33,6 +33,17 @@ enum KeystrokeTyper {
                 // from an actual keystroke to anything reading raw key codes.
                 down.flags = modifiers
                 up.flags = modifiers
+
+                // Also actually press the modifier key(s), not just set the
+                // flag bit on this event: a VM's virtualized keyboard tracks
+                // Shift/Option state from real key presses the way the guest
+                // OS's own driver would, and ignores a flag with no
+                // corresponding keystroke — without this, shifted characters
+                // (capitals, $ % * etc.) arrive at the guest unshifted.
+                pressModifiers(modifiers, source: source)
+                down.post(tap: .cghidEventTap)
+                up.post(tap: .cghidEventTap)
+                releaseModifiers(modifiers, source: source)
             } else {
                 // No key on the current layout produces this character (e.g.
                 // an emoji, or a script outside the keyboard layout) — fall
@@ -45,13 +56,48 @@ enum KeystrokeTyper {
                 let units = Array(String(character).utf16)
                 down.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
                 up.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
-            }
 
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
+                down.post(tap: .cghidEventTap)
+                up.post(tap: .cghidEventTap)
+            }
 
             usleep(delayMicroseconds)
         }
+    }
+
+    /// Presses whichever of Shift/Option this character needs, in that
+    /// order, each event's flags reflecting the cumulative state so far
+    /// (so a Shift+Option character reports both held once Option goes
+    /// down). Always built explicitly rather than inherited from ambient
+    /// state, so a physically-held key elsewhere (e.g. the Cmd used to
+    /// trigger the paste hotkey itself) never leaks onto these.
+    private static func pressModifiers(_ modifiers: CGEventFlags, source: CGEventSource?) {
+        if modifiers.contains(.maskShift) {
+            postModifierEvent(keyCode: CGKeyCode(kVK_Shift), keyDown: true, flags: .maskShift, source: source)
+        }
+        if modifiers.contains(.maskAlternate) {
+            let held: CGEventFlags = modifiers.contains(.maskShift) ? [.maskShift, .maskAlternate] : .maskAlternate
+            postModifierEvent(keyCode: CGKeyCode(kVK_Option), keyDown: true, flags: held, source: source)
+        }
+    }
+
+    /// Releases in reverse order, each event's flags reflecting the state
+    /// immediately after that release (matching how a real modifier keyUp
+    /// reports itself).
+    private static func releaseModifiers(_ modifiers: CGEventFlags, source: CGEventSource?) {
+        if modifiers.contains(.maskAlternate) {
+            let stillHeld: CGEventFlags = modifiers.contains(.maskShift) ? .maskShift : []
+            postModifierEvent(keyCode: CGKeyCode(kVK_Option), keyDown: false, flags: stillHeld, source: source)
+        }
+        if modifiers.contains(.maskShift) {
+            postModifierEvent(keyCode: CGKeyCode(kVK_Shift), keyDown: false, flags: [], source: source)
+        }
+    }
+
+    private static func postModifierEvent(keyCode: CGKeyCode, keyDown: Bool, flags: CGEventFlags, source: CGEventSource?) {
+        guard let event = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: keyDown) else { return }
+        event.flags = flags
+        event.post(tap: .cghidEventTap)
     }
 }
 

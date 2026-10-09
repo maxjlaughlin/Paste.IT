@@ -80,7 +80,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func pasteHistoryItem(_ sender: NSMenuItem) {
         let history = ClipboardStore.shared.history
         guard history.indices.contains(sender.tag) else { return }
-        ActionController.shared.performPaste(history[sender.tag])
+        ActionController.shared.selectFromHistory(history[sender.tag])
     }
 
     @objc private func clearHistory() {

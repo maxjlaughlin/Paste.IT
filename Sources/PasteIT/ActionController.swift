@@ -33,6 +33,18 @@ final class ActionController {
         KeystrokeTyper.type(target)
     }
 
+    /// Makes an older Recent Copies entry the current one — moving it to
+    /// the top of history and onto the system pasteboard, the same place a
+    /// fresh Copy would put it — without typing anything. Paste (hotkey or
+    /// menu) will then use this entry the next time it's triggered.
+    func selectFromHistory(_ text: String) {
+        guard !text.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        ClipboardStore.shared.add(text)
+    }
+
     private func captureFromPasteboard() {
         let pasteboard = NSPasteboard.general
         let previousChangeCount = pasteboard.changeCount
