@@ -2,12 +2,21 @@
 # Builds Paste.IT as a universal binary (Apple Silicon + Intel) and
 # packages it into a runnable, self-contained .app bundle with icon.
 #
-# By default this ad-hoc signs the app, which is fine for running it on
-# your own Mac. To produce a build you can hand to someone else's Mac
-# without Gatekeeper blocking it, set DEVELOPER_ID_APPLICATION to your
-# "Developer ID Application" signing identity before running this script,
-# then run notarize.sh afterwards. See README.md > "Distributing outside
-# your own Mac" for how to obtain that identity.
+# By default this ad-hoc signs the app. That's fine for a one-off run, but
+# ad-hoc signatures are derived from the binary's own contents, so they
+# change on every rebuild — which means macOS treats each build as a new
+# app and makes you re-grant Accessibility every time. For local iteration,
+# pass a stable local identity instead (e.g. a self-signed "Code Signing"
+# certificate created once in Keychain Access > Certificate Assistant >
+# Create a Certificate…), and Accessibility will keep working across
+# rebuilds without re-prompting:
+#
+#   DEVELOPER_ID_APPLICATION="Your Local Dev Cert Name" ./Scripts/build_app.sh
+#
+# To produce a build you can hand to someone else's Mac without Gatekeeper
+# blocking it, pass a real "Developer ID Application" signing identity
+# instead (detected by name below), then run notarize.sh afterwards. See
+# README.md > "Distributing outside your own Mac" for how to obtain one.
 #
 #   DEVELOPER_ID_APPLICATION="Developer ID Application: Your Name (TEAMID)" \
 #     ./Scripts/build_app.sh
@@ -51,14 +60,19 @@ else
 fi
 
 if [ "$SIGN_IDENTITY" = "-" ]; then
-    echo "Code signing ad-hoc (local testing only — set DEVELOPER_ID_APPLICATION to distribute this build)..."
+    echo "Code signing ad-hoc (identity changes every rebuild — Accessibility will need re-granting each time; see the note at the top of this script for a stable alternative)..."
     codesign --force --deep --sign - \
         --entitlements "$ROOT_DIR/PasteIT.entitlements" \
         "$APP_DIR"
-else
+elif [[ "$SIGN_IDENTITY" == "Developer ID Application:"* ]]; then
     echo "Code signing with \"$SIGN_IDENTITY\" (hardened runtime, ready for notarization)..."
     codesign --force --deep --options runtime --timestamp \
         --sign "$SIGN_IDENTITY" \
+        --entitlements "$ROOT_DIR/PasteIT.entitlements" \
+        "$APP_DIR"
+else
+    echo "Code signing with \"$SIGN_IDENTITY\" (stable local identity — Accessibility permission will persist across rebuilds)..."
+    codesign --force --deep --sign "$SIGN_IDENTITY" \
         --entitlements "$ROOT_DIR/PasteIT.entitlements" \
         "$APP_DIR"
 fi
@@ -70,9 +84,14 @@ echo ""
 echo "Done: $APP_DIR"
 if [ "$SIGN_IDENTITY" = "-" ]; then
     echo "This is an ad-hoc build — it'll run on this Mac but Gatekeeper will"
-    echo "block it on any other Mac. See README.md for notarizing a real build."
-else
+    echo "block it on any other Mac, and Accessibility will need re-granting"
+    echo "on every rebuild. See the note at the top of this script for a"
+    echo "stable local signing identity, or README.md for a real Developer ID."
+elif [[ "$SIGN_IDENTITY" == "Developer ID Application:"* ]]; then
     echo "Signed and hardened. Next: ./Scripts/notarize.sh to notarize it."
+else
+    echo "Signed with a stable local identity — Accessibility permission will"
+    echo "carry over to your next rebuild without re-prompting."
 fi
 echo "On first launch, grant Accessibility permission when macOS prompts"
 echo "(System Settings > Privacy & Security > Accessibility)."

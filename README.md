@@ -88,6 +88,38 @@ executable directly, so it won't show the custom icon or Info.plist
 metadata — those only apply to the `.app` produced by `build_app.sh`. Use
 Option A for quick iteration, Option B for the real installable app.
 
+### Avoiding repeated Accessibility prompts while iterating
+
+Ad-hoc signing (the default) derives the app's signing identity from its own
+binary contents, so it's different on every rebuild. macOS ties Accessibility
+trust to that identity, so each rebuild looks like a brand-new app — you'll
+be asked to re-grant Accessibility every time, and if the old grant lingers
+stale in System Settings, Copy/Paste can silently stop working (synthetic
+keystrokes fail quietly when the running binary isn't actually trusted).
+
+To fix a stuck/stale grant immediately:
+
+```sh
+tccutil reset Accessibility com.pasteit.app
+```
+
+Then relaunch the app and grant Accessibility fresh.
+
+To stop this from recurring on every rebuild, sign with a stable local
+identity instead of ad-hoc: open **Keychain Access > Certificate Assistant >
+Create a Certificate…**, name it anything, set Identity Type to **Self Signed
+Root** and Certificate Type to **Code Signing**, then build with:
+
+```sh
+DEVELOPER_ID_APPLICATION="Your Cert Name" ./Scripts/build_app.sh
+```
+
+Since that identity doesn't change between builds, Accessibility trust
+persists across rebuilds. (This is unrelated to the real Developer ID
+certificate used for distribution below — `build_app.sh` only applies
+hardened-runtime signing when the identity string actually starts with
+`Developer ID Application:`.)
+
 ## Distributing outside your own Mac (code signing & notarization)
 
 An ad-hoc signed build (the default) only runs on the Mac that built it —
