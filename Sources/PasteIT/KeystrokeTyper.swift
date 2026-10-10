@@ -210,8 +210,12 @@ private enum CurrentKeyboardLayout {
         lock.unlock()
         guard !alreadyObserving else { return }
 
+        // Referenced by its literal name rather than the Carbon constant:
+        // SwiftPM command-line builds (unlike Xcode) don't expose
+        // kTISNotifySelectedKeyboardInputSourceChangedNotification through
+        // the Carbon module, even though it's a fixed, documented value.
         DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChangedNotification as String),
+            forName: Notification.Name("com.apple.Carbon.TISNotifySelectedKeyboardInputSourceChangedNotification"),
             object: nil,
             queue: nil
         ) { _ in
