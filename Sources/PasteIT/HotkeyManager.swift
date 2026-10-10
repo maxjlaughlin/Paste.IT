@@ -1,24 +1,20 @@
 import Cocoa
 import Carbon
 
-/// Listens system-wide for the configured Copy/Paste hotkeys using a
+/// Listens system-wide for the configured Paste hotkey using a
 /// CGEventTap. This requires the app to be trusted for Accessibility in
 /// System Settings > Privacy & Security > Accessibility — the same
 /// permission needed to type synthetic keystrokes into other apps.
 final class HotkeyManager {
     private let settings: HotkeySettings
-    private let onCopy: () -> Void
-    private let onNativeCopy: () -> Void
     private let onPaste: () -> Void
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var trustCheckTimer: Timer?
 
-    init(settings: HotkeySettings, onCopy: @escaping () -> Void, onNativeCopy: @escaping () -> Void, onPaste: @escaping () -> Void) {
+    init(settings: HotkeySettings, onPaste: @escaping () -> Void) {
         self.settings = settings
-        self.onCopy = onCopy
-        self.onNativeCopy = onNativeCopy
         self.onPaste = onPaste
     }
 
@@ -103,17 +99,6 @@ final class HotkeyManager {
             return nil
         }
 
-        if settings.copyHotkey.matches(keyCode: keyCode, flags: flags) {
-            if settings.copyHotkey.isBareCommand(keyCode: 8) {
-                // Plain ⌘C: let the frontmost app's own copy happen and just
-                // capture the result — resimulating ⌘C here would match
-                // this same hotkey again and loop forever.
-                DispatchQueue.main.async { self.onNativeCopy() }
-            } else {
-                DispatchQueue.main.async { self.onCopy() }
-            }
-            return settings.copyHotkey.consumesEvent ? nil : Unmanaged.passRetained(event)
-        }
         if settings.pasteHotkey.matches(keyCode: keyCode, flags: flags) {
             DispatchQueue.main.async { self.onPaste() }
             return settings.pasteHotkey.consumesEvent ? nil : Unmanaged.passRetained(event)

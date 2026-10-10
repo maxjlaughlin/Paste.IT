@@ -1,90 +1,37 @@
 import Cocoa
 
-/// Ties together the "Copy" and "Paste" actions used by both the menu bar
-/// icon and the global hotkeys.
+/// Drives the single Paste action shared by the global hotkey, the
+/// right-click Services entry, and the floating button. Always reads
+/// straight off the system clipboard — Paste.IT keeps no clipboard
+/// history or buffer of its own.
 final class ActionController {
     static let shared = ActionController()
     private init() {}
 
-    /// Simulates Cmd+C so the frontmost app copies its current selection,
-    /// then pulls the result off the system pasteboard into our own buffer.
-    /// Use this from triggers that don't already cause a native copy on
-    /// their own (menu bar click, Services entry, or a hotkey combo other
-    /// than plain ⌘C).
-    func performCopy() {
-        simulateCommandKeystroke(virtualKey: 8) // 'c'
-        captureFromPasteboard()
-    }
-
-    /// Call this when the Copy hotkey itself is plain ⌘C and was left
-    /// unconsumed: the real keystroke already reached the frontmost app and
-    /// triggered its native copy, so just read the result. Simulating
-    /// another ⌘C here would re-trigger the same global hotkey and loop
-    /// forever.
-    func captureRealCopy() {
-        captureFromPasteboard()
-    }
-
-    /// Types text out at the current cursor location via synthetic
-    /// keystrokes instead of a system paste. Defaults to the most recent
-    /// copy; pass a specific history entry to paste an older one.
+    /// Types the current system clipboard contents out at the current
+    /// cursor location via synthetic keystrokes instead of a system paste,
+    /// so it works anywhere a real keyboard would — including inside
+    /// RDP/VNC windows and VMs that don't sync the clipboard.
     ///
-    /// If nothing has been explicitly selected and the system pasteboard
-    /// currently holds something Paste.IT can't type (most commonly an
-    /// image from a screenshot-to-clipboard shortcut), this defers to a
-    /// real system paste instead of retyping whatever text came before it.
-    /// Checked live against the pasteboard right here — not from
-    /// PasteboardWatcher's periodic poll, which could still be a tick
-    /// behind a screenshot taken just before Paste is triggered right after
-    /// it, and was the source of the screenshot-paste only "working ~75% of
-    /// the time". Copying new text, or picking an older entry from Recent
-    /// Copies, naturally switches this back to typing since both already
-    /// put real text on the pasteboard.
-    func performPaste(_ text: String? = nil) {
-        if text == nil, NSPasteboard.general.string(forType: .string) == nil {
-            simulateCommandKeystroke(virtualKey: 9) // 'v'
+    /// If the clipboard currently holds something Paste.IT can't type
+    /// (most commonly an image from a screenshot-to-clipboard shortcut),
+    /// this falls back to a real system paste instead.
+    func performPaste() {
+        guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else {
+            simulateCommandV()
             return
         }
-        guard let target = text ?? ClipboardStore.shared.history.first, !target.isEmpty else { return }
-        KeystrokeTyper.type(target)
+        KeystrokeTyper.type(text)
     }
 
-    /// Makes an older Recent Copies entry the current one — moving it to
-    /// the top of history and onto the system pasteboard, the same place a
-    /// fresh Copy would put it — without typing anything. Paste (hotkey or
-    /// menu) will then use this entry the next time it's triggered.
-    func selectFromHistory(_ text: String) {
-        guard !text.isEmpty else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        ClipboardStore.shared.add(text)
-    }
-
-    private func captureFromPasteboard() {
-        let pasteboard = NSPasteboard.general
-        let previousChangeCount = pasteboard.changeCount
-
-        // Gives the frontmost app time to actually finish its native copy
-        // before checking — too short a window here reads as an occasional
-        // "Copy silently did nothing" under system load or in slower apps.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            guard pasteboard.changeCount != previousChangeCount,
-                  let copied = pasteboard.string(forType: .string) else { return }
-            ClipboardStore.shared.add(copied)
-        }
-    }
-
-    /// Used for both triggering a native Copy (virtualKey 8, 'c') and
-    /// falling back to a real native Paste (virtualKey 9, 'v') when the
-    /// pasteboard holds something that can't be typed. Only needs to work
-    /// against native Mac apps — if the frontmost app happens to be a VM
-    /// window, forwarding this into the guest isn't attempted; pasting a
-    /// screenshot there is a known, accepted limitation.
-    private func simulateCommandKeystroke(virtualKey: CGKeyCode) {
+    /// Fallback for when the clipboard holds something that can't be typed.
+    /// Only works against native Mac apps — if the frontmost app happens to
+    /// be a VM window, forwarding this into the guest isn't attempted;
+    /// pasting a screenshot there is a known, accepted limitation.
+    private func simulateCommandV() {
         let source = CGEventSource(stateID: .hidSystemState)
-        guard let down = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: false) else {
+        guard let down = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
             return
         }
         down.flags = .maskCommand

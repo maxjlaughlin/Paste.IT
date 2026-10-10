@@ -1,14 +1,13 @@
 import Cocoa
 
 final class SettingsWindowController: NSWindowController {
-    private let copyRecorder = HotkeyRecorderView(frame: NSRect(x: 0, y: 0, width: 100, height: 24))
     private let pasteRecorder = HotkeyRecorderView(frame: NSRect(x: 0, y: 0, width: 100, height: 24))
-    private let copyOverrideCheckbox = NSButton(checkboxWithTitle: "Use ⌘C to capture copies", target: nil, action: nil)
     private let pasteOverrideCheckbox = NSButton(checkboxWithTitle: "Use ⌘V / ⌘⇧V to trigger typed paste", target: nil, action: nil)
+    private let floatingButtonCheckbox = NSButton(checkboxWithTitle: "Show floating Paste.IT button", target: nil, action: nil)
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 220),
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 190),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -19,22 +18,20 @@ final class SettingsWindowController: NSWindowController {
         buildUI()
     }
 
+    /// Refreshes every control from the current settings each time the
+    /// window is shown, since either hotkey or the floating button can also
+    /// be changed from outside this window (e.g. the menu bar menu).
+    override func showWindow(_ sender: Any?) {
+        pasteRecorder.hotkey = HotkeySettings.shared.pasteHotkey
+        pasteOverrideCheckbox.state = HotkeySettings.shared.pasteHotkey.isBareCommand(keyCode: 9) ? .on : .off
+        floatingButtonCheckbox.state = FloatingPasteButtonController.shared.isEnabled ? .on : .off
+        super.showWindow(sender)
+    }
+
     private func buildUI() {
         guard let window = window else { return }
 
-        copyRecorder.hotkey = HotkeySettings.shared.copyHotkey
         pasteRecorder.hotkey = HotkeySettings.shared.pasteHotkey
-        copyRecorder.onChange = { [weak self] hotkey in
-            // Bare ⌘C must stay unconsumed no matter how it was recorded —
-            // that passthrough is what lets the frontmost app's native copy
-            // fire at all. Anything else should always be swallowed, since
-            // nothing legitimately binds a custom combo like Option+Cmd+C.
-            var updated = hotkey
-            updated.consumesEvent = !updated.isBareCommand(keyCode: 8)
-            HotkeySettings.shared.copyHotkey = updated
-            HotkeySettings.shared.save()
-            self?.copyOverrideCheckbox.state = updated.isBareCommand(keyCode: 8) ? .on : .off
-        }
         pasteRecorder.onChange = { [weak self] hotkey in
             // Paste always types the text itself, so the real keystroke
             // should always be swallowed — there's no case where letting it
@@ -46,27 +43,23 @@ final class SettingsWindowController: NSWindowController {
             self?.pasteOverrideCheckbox.state = updated.isBareCommand(keyCode: 9) ? .on : .off
         }
 
-        copyOverrideCheckbox.target = self
-        copyOverrideCheckbox.action = #selector(copyOverrideToggled)
-        copyOverrideCheckbox.state = HotkeySettings.shared.copyHotkey.isBareCommand(keyCode: 8) ? .on : .off
-
         pasteOverrideCheckbox.target = self
         pasteOverrideCheckbox.action = #selector(pasteOverrideToggled)
         pasteOverrideCheckbox.state = HotkeySettings.shared.pasteHotkey.isBareCommand(keyCode: 9) ? .on : .off
 
-        let copyRow = NSStackView(views: [NSTextField(labelWithString: "Copy hotkey:"), copyRecorder])
-        copyRow.orientation = .horizontal
-        copyRow.spacing = 8
+        floatingButtonCheckbox.target = self
+        floatingButtonCheckbox.action = #selector(floatingButtonToggled)
+        floatingButtonCheckbox.state = FloatingPasteButtonController.shared.isEnabled ? .on : .off
 
         let pasteRow = NSStackView(views: [NSTextField(labelWithString: "Paste hotkey:"), pasteRecorder])
         pasteRow.orientation = .horizontal
         pasteRow.spacing = 8
 
-        let note = NSTextField(wrappingLabelWithString: "Paste always types the copied text out as keystrokes, so it works through remote desktop sessions and VMs.")
+        let note = NSTextField(wrappingLabelWithString: "Paste always types the clipboard's text out as keystrokes, so it works through remote desktop sessions and VMs.")
         note.font = .systemFont(ofSize: 11)
         note.textColor = .secondaryLabelColor
 
-        let stack = NSStackView(views: [copyRow, copyOverrideCheckbox, pasteRow, pasteOverrideCheckbox, note])
+        let stack = NSStackView(views: [pasteRow, pasteOverrideCheckbox, floatingButtonCheckbox, note])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -84,13 +77,12 @@ final class SettingsWindowController: NSWindowController {
         ])
     }
 
-    @objc private func copyOverrideToggled() {
-        HotkeySettings.shared.useSystemCopyOverride(copyOverrideCheckbox.state == .on)
-        copyRecorder.hotkey = HotkeySettings.shared.copyHotkey
-    }
-
     @objc private func pasteOverrideToggled() {
         HotkeySettings.shared.useSystemPasteOverride(pasteOverrideCheckbox.state == .on)
         pasteRecorder.hotkey = HotkeySettings.shared.pasteHotkey
+    }
+
+    @objc private func floatingButtonToggled() {
+        FloatingPasteButtonController.shared.setEnabled(floatingButtonCheckbox.state == .on)
     }
 }

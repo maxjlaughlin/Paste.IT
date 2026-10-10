@@ -1,33 +1,32 @@
 # Paste.IT
 
-A minimal, local-only macOS menu bar utility for copying and pasting text via
-synthetic keystrokes instead of the system clipboard — so paste keeps working
-inside remote desktop sessions and VMs that don't sync the clipboard.
+A minimal, local-only macOS menu bar utility that pastes the system
+clipboard's text via synthetic keystrokes instead of a normal paste — so
+paste keeps working inside remote desktop sessions and VMs that don't sync
+the clipboard. Copying is just the normal system clipboard; Paste.IT doesn't
+touch it or keep any history of its own.
 
 ## How it works
 
-- **Copy.IT**: highlight text anywhere, then either right-click and choose
-  **Services > Copy.IT**, or click the menu bar icon and choose **Copy**.
-  Either path simulates Cmd+C to capture the selection, then stores it in an
-  in-memory buffer inside the app (nothing is written to disk).
-- **Any other copy also counts**: Paste.IT watches the system pasteboard in
-  the background, so a plain right-click **Copy**, an app's own **Edit >
-  Copy**, or any other app's copy shortcut is picked up automatically too —
-  you don't have to go through Copy.IT specifically for something to become
-  pasteable here.
-- **Paste**: click where you want the text, then click the menu bar icon and
-  choose **Paste**. Paste.IT types the stored text out character by
-  character using synthetic key events (`CGEvent`), so it works anywhere a
-  real keyboard would — including inside RDP/VNC windows and VMs.
-- **Hotkeys**: optional global hotkeys for Copy and Paste, configurable in
+- **Paste**: copy something normally (Cmd+C, right-click Copy, whatever),
+  click where you want it, then trigger a paste one of these ways:
+  - the menu bar icon's **Paste** item,
+  - the configurable global **Paste hotkey** (see Settings),
+  - right-click where you want the text and choose **Services > Paste with
+    Paste.IT** (wherever macOS's Services menu is supported — most native
+    text fields), or
+  - the optional **floating Paste.IT button** — toggle it on from the menu
+    bar menu or Settings, then click it from anywhere without shifting
+    keyboard focus off the window you're pasting into, so a VM/RDP window
+    stays the paste destination even though the button floats above it.
+
+  However it's triggered, Paste.IT reads whatever is currently on the system
+  clipboard and types it out character by character using synthetic key
+  events (`CGEvent`), so it works anywhere a real keyboard would — including
+  inside RDP/VNC windows and VMs.
+- **Hotkey**: an optional global hotkey for Paste, configurable in
   **Settings**. There's also a toggle to make Cmd+V / Cmd+Shift+V itself
   trigger a typed paste instead of the default combo.
-- **Recent Copies**: the menu bar icon has a **Recent Copies** submenu
-  listing up to the last 20 copies (most recent first); clicking an entry
-  makes it the current one (top of history, and on the system pasteboard)
-  without typing anything — **Paste** (menu item or hotkey) then uses it.
-  History is in memory only and is wiped when the app quits — nothing is
-  ever written to disk.
 
 ## Compatibility
 
@@ -41,8 +40,9 @@ merges them into one universal binary with `lipo`, so a single build of
 ## Security notes
 
 - 100% local. No network code, no analytics, no external dependencies.
-- Copy history (up to 20 entries) lives in memory only and is cleared when
-  the app quits — nothing is ever written to disk.
+- Keeps no clipboard history or buffer of its own — always reads directly
+  from the system clipboard at the moment Paste is triggered, and nothing is
+  ever written to disk.
 - Built entirely on Apple's own frameworks (AppKit / Core Graphics) — nothing
   to install beyond Xcode's command line tools.
 - Requires the **Accessibility** permission, because that's what macOS
@@ -56,15 +56,14 @@ merges them into one universal binary with `lipo`, so a single build of
 
 ## Using alongside other clipboard managers (e.g. CopyClip)
 
-Paste.IT's Copy action simulates Cmd+C, so whatever you copy also lands on
-the real system pasteboard as a side effect — other clipboard history tools
-like CopyClip will pick it up normally, no conflict there. The one setting
-to avoid combining with another clipboard manager is the **"Use ⌘V / ⌘⇧V to
-trigger typed paste"** override in Settings: when enabled it intercepts
-*every* Cmd+V system-wide, including synthetic ones other apps send (e.g.
-CopyClip pasting a selected history item), and replaces them with Paste.IT's
-own typed paste. Leave that toggle off and use Paste.IT's dedicated hotkey
-instead if you want both tools running side by side.
+Paste.IT doesn't keep any clipboard history of its own — it always types out
+whatever is currently on the system clipboard — so it runs alongside other
+clipboard managers with no conflict there. The one setting to watch is the
+**"Use ⌘V / ⌘⇧V to trigger typed paste"** override in Settings: when enabled
+it intercepts *every* Cmd+V system-wide, including synthetic ones other apps
+send (e.g. CopyClip pasting a selected history item), and replaces them with
+Paste.IT's own typed paste. Leave that toggle off and use Paste.IT's
+dedicated hotkey instead if you want both tools running side by side.
 
 ## Building
 
@@ -194,9 +193,10 @@ expire per-build, but Apple notarizes each binary individually.
 1. Launch the app — a clipboard icon appears in the menu bar (no Dock icon).
 2. Grant Accessibility access when prompted (required for both typing
    keystrokes and listening for hotkeys).
-3. Try it: select some text anywhere, click the menu bar icon > **Copy**,
-   click into a destination field, click the icon > **Paste**.
-4. Optionally set custom hotkeys and the Cmd+V override in **Settings**.
+3. Try it: copy some text normally (Cmd+C), click into a destination field,
+   then click the menu bar icon > **Paste**.
+4. Optionally set a custom Paste hotkey, the Cmd+V override, and the
+   floating button in **Settings**.
 
 ## Project layout
 
@@ -206,14 +206,14 @@ Sources/PasteIT/
   main.swift                   App entry point
   AppDelegate.swift            Wires everything together on launch
   StatusItemController.swift   Menu bar icon + menu
-  ActionController.swift       Copy / Paste actions
-  ClipboardStore.swift         In-memory buffer for the copied text
+  ActionController.swift       Paste action (reads the system clipboard)
   KeystrokeTyper.swift         Synthetic keystroke typing engine
   HotkeyManager.swift          Global hotkey listener (CGEventTap)
   HotkeySettings.swift         Hotkey persistence (UserDefaults, local only)
   HotkeyRecorderView.swift     "Click to record a hotkey" control
   SettingsWindowController.swift  Settings window UI
-  ServiceProvider.swift        Backs the right-click "Copy.IT" Services entry
+  FloatingPasteButtonController.swift  Optional always-on-top paste button
+  ServiceProvider.swift        Backs the right-click "Paste with Paste.IT" Services entry
   MenuBarIconProvider.swift    Loads the menu bar glyph
   Resources/MenuBarIcon.png    Menu bar template glyph (bundled via SPM resources)
 Resources/Info.plist           App bundle metadata + Services registration
@@ -242,9 +242,14 @@ those into `AppIcon.icns` via `iconutil` (macOS only) as part of the build.
 ## Known limitations / next steps
 
 - Default hotkey key-code table only covers letter keys — fine for the
-  default C/V bindings, extend `KeyCodeNames` if you bind other keys.
+  default V binding, extend `KeyCodeNames` if you bind another key.
 - Ad-hoc builds only run on the Mac that built them; see "Distributing
   outside your own Mac" above for Developer ID signing + notarization.
-- The right-click "Copy.IT" Services entry may need to be enabled once under
-  **System Settings > Keyboard > Keyboard Shortcuts > Services** the first
-  time, depending on macOS version.
+- The right-click "Paste with Paste.IT" Services entry may need to be
+  enabled once under **System Settings > Keyboard > Keyboard Shortcuts >
+  Services** the first time, depending on macOS version — and only appears
+  where the focused view supports Services at all (most native Cocoa text
+  fields). A VM/RDP window's rendered screen typically won't offer it; use
+  the hotkey or floating button there instead.
+- The floating button's position isn't remembered across toggles — it
+  reappears in the top-right corner of the main screen each time it's shown.

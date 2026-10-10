@@ -2,8 +2,8 @@ import Cocoa
 
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-    private let recentMenu = NSMenu()
     private var settingsWindowController: SettingsWindowController?
+    private var floatingButtonItem: NSMenuItem?
 
     func install() {
         if let button = statusItem.button {
@@ -11,14 +11,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         let menu = NSMenu()
-        menu.addItem(withTitle: "Copy", action: #selector(copyTapped), keyEquivalent: "").target = self
+        menu.delegate = self
         menu.addItem(withTitle: "Paste", action: #selector(pasteTapped), keyEquivalent: "").target = self
         menu.addItem(.separator())
 
-        recentMenu.delegate = self
-        let recentItem = NSMenuItem(title: "Recent Copies", action: nil, keyEquivalent: "")
-        recentItem.submenu = recentMenu
-        menu.addItem(recentItem)
+        let floatingItem = NSMenuItem(title: "Floating Paste.IT Button", action: #selector(floatingButtonToggled), keyEquivalent: "")
+        floatingItem.target = self
+        menu.addItem(floatingItem)
+        floatingButtonItem = floatingItem
 
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(settingsTapped), keyEquivalent: "").target = self
@@ -27,12 +27,18 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         statusItem.menu = menu
     }
 
-    @objc private func copyTapped() {
-        ActionController.shared.performCopy()
+    /// Keeps the checkmark in sync even when the floating button was
+    /// toggled from the Settings window instead of this menu.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        floatingButtonItem?.state = FloatingPasteButtonController.shared.isEnabled ? .on : .off
     }
 
     @objc private func pasteTapped() {
         ActionController.shared.performPaste()
+    }
+
+    @objc private func floatingButtonToggled() {
+        FloatingPasteButtonController.shared.setEnabled(!FloatingPasteButtonController.shared.isEnabled)
     }
 
     @objc private func settingsTapped() {
@@ -44,58 +50,5 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func quitTapped() {
         NSApp.terminate(nil)
-    }
-
-    // MARK: - Recent Copies submenu
-
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        guard menu === recentMenu else { return }
-        menu.removeAllItems()
-
-        let history = ClipboardStore.shared.history
-        guard !history.isEmpty else {
-            let empty = NSMenuItem(title: "No recent copies", action: nil, keyEquivalent: "")
-            empty.isEnabled = false
-            menu.addItem(empty)
-            return
-        }
-
-        for (index, entry) in history.enumerated() {
-            let item = NSMenuItem(
-                title: RecentCopyFormatter.title(for: entry),
-                action: #selector(pasteHistoryItem(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.tag = index
-            menu.addItem(item)
-        }
-
-        menu.addItem(.separator())
-        let clear = NSMenuItem(title: "Clear History", action: #selector(clearHistory), keyEquivalent: "")
-        clear.target = self
-        menu.addItem(clear)
-    }
-
-    @objc private func pasteHistoryItem(_ sender: NSMenuItem) {
-        let history = ClipboardStore.shared.history
-        guard history.indices.contains(sender.tag) else { return }
-        ActionController.shared.selectFromHistory(history[sender.tag])
-    }
-
-    @objc private func clearHistory() {
-        ClipboardStore.shared.clear()
-    }
-}
-
-private enum RecentCopyFormatter {
-    static func title(for text: String, maxLength: Int = 40) -> String {
-        let collapsed = text
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !collapsed.isEmpty else { return "(empty)" }
-        guard collapsed.count > maxLength else { return collapsed }
-        let cutoff = collapsed.index(collapsed.startIndex, offsetBy: maxLength)
-        return collapsed[..<cutoff] + "…"
     }
 }

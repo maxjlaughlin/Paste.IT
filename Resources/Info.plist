@@ -28,13 +28,13 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>Copy.IT</string>
+                <string>Paste with Paste.IT</string>
             </dict>
             <key>NSMessage</key>
-            <string>copyIt</string>
+            <string>pasteWithPasteIt</string>
             <key>NSPortName</key>
             <string>Paste.IT</string>
-            <key>NSSendTypes</key>
+            <key>NSReturnTypes</key>
             <array>
                 <string>public.utf8-plain-text</string>
             </array>
