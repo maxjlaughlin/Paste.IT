@@ -1,4 +1,5 @@
 import Cocoa
+import Carbon
 
 /// Listens system-wide for the configured Copy/Paste hotkeys using a
 /// CGEventTap. This requires the app to be trusted for Accessibility in
@@ -93,6 +94,14 @@ final class HotkeyManager {
 
         let flags = event.flags
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+
+        // Escape cancels an in-progress paste. Only intercepted while
+        // KeystrokeTyper is actually typing — the rest of the time Escape
+        // passes through untouched, same as always, everywhere else.
+        if keyCode == UInt16(kVK_Escape), KeystrokeTyper.isTypingNow() {
+            KeystrokeTyper.cancel()
+            return nil
+        }
 
         if settings.copyHotkey.matches(keyCode: keyCode, flags: flags) {
             if settings.copyHotkey.isBareCommand(keyCode: 8) {

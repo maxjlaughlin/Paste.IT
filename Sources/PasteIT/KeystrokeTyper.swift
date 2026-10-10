@@ -17,6 +17,24 @@ enum KeystrokeTyper {
     private static let queue = DispatchQueue(label: "com.pasteit.keystroketyper")
     private static let lock = NSLock()
     private static var isTyping = false
+    private static var cancelRequested = false
+
+    /// Whether a paste is currently in progress — checked by HotkeyManager
+    /// to decide whether Escape should cancel it right now, rather than
+    /// behaving normally everywhere else.
+    static func isTypingNow() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isTyping
+    }
+
+    /// Stops typing after whatever character is currently mid-flight —
+    /// doesn't try to undo characters already typed.
+    static func cancel() {
+        lock.lock()
+        cancelRequested = true
+        lock.unlock()
+    }
 
     /// Dispatches the actual typing to a background queue and returns
     /// immediately. Typing a long string takes long enough (every event has
@@ -38,6 +56,7 @@ enum KeystrokeTyper {
         lock.lock()
         guard !isTyping else { lock.unlock(); return }
         isTyping = true
+        cancelRequested = false
         lock.unlock()
 
         queue.async {
@@ -63,6 +82,11 @@ enum KeystrokeTyper {
         usleep(200_000)
 
         for character in text {
+            lock.lock()
+            let shouldStop = cancelRequested
+            lock.unlock()
+            if shouldStop { break }
+
             let mapped = keyCodeMap[character]
             let virtualKey = mapped?.0 ?? 0
 
