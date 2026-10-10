@@ -92,8 +92,23 @@ final class HotkeyManager {
         }
         guard type == .keyDown else { return Unmanaged.passRetained(event) }
 
+        // ActionController's synthetic Cmd+C / Cmd+V (performCopy, and
+        // performPaste's real-paste fallback) flow back through this same
+        // tap — a HID-level post is visible to a session-level tap too.
+        // Recognize and pass them straight through instead of matching one
+        // as a fresh hotkey press; see ActionController.syntheticEventTag.
+        if event.getIntegerValueField(.eventSourceUserData) == ActionController.syntheticEventTag {
+            return Unmanaged.passRetained(event)
+        }
+
         let flags = event.flags
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+        // Holding a hotkey down even slightly past macOS's key-repeat delay
+        // sends further keyDown events for it. Still consumed below (so
+        // they don't leak into the frontmost app) but not re-triggered —
+        // otherwise a single, slightly-long press retypes/re-copies
+        // several times in a row.
+        let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
 
         // Escape cancels an in-progress paste. Only intercepted while
         // KeystrokeTyper is actually typing — the rest of the time Escape
@@ -104,18 +119,22 @@ final class HotkeyManager {
         }
 
         if settings.copyHotkey.matches(keyCode: keyCode, flags: flags) {
-            if settings.copyHotkey.isBareCommand(keyCode: 8) {
-                // Plain ⌘C: let the frontmost app's own copy happen and just
-                // capture the result — resimulating ⌘C here would match
-                // this same hotkey again and loop forever.
-                DispatchQueue.main.async { self.onNativeCopy() }
-            } else {
-                DispatchQueue.main.async { self.onCopy() }
+            if !isAutorepeat {
+                if settings.copyHotkey.isBareCommand(keyCode: 8) {
+                    // Plain ⌘C: let the frontmost app's own copy happen and just
+                    // capture the result — resimulating ⌘C here would match
+                    // this same hotkey again and loop forever.
+                    DispatchQueue.main.async { self.onNativeCopy() }
+                } else {
+                    DispatchQueue.main.async { self.onCopy() }
+                }
             }
             return settings.copyHotkey.consumesEvent ? nil : Unmanaged.passRetained(event)
         }
         if settings.pasteHotkey.matches(keyCode: keyCode, flags: flags) {
-            DispatchQueue.main.async { self.onPaste() }
+            if !isAutorepeat {
+                DispatchQueue.main.async { self.onPaste() }
+            }
             return settings.pasteHotkey.consumesEvent ? nil : Unmanaged.passRetained(event)
         }
         return Unmanaged.passRetained(event)

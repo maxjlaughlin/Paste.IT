@@ -6,6 +6,12 @@ final class ActionController {
     static let shared = ActionController()
     private init() {}
 
+    /// Tags every synthetic Cmd+C / Cmd+V event posted by
+    /// simulateCommandKeystroke below, so HotkeyManager's own event tap can
+    /// recognize and ignore them instead of matching one as a fresh hotkey
+    /// press. See the tap's check of this tag for why that matters.
+    static let syntheticEventTag: Int64 = 0x5061_7374_4549_54 // "PastEIT", arbitrary non-zero
+
     /// Simulates Cmd+C so the frontmost app copies its current selection,
     /// then pulls the result off the system pasteboard into our own buffer.
     /// Use this from triggers that don't already cause a native copy on
@@ -81,6 +87,14 @@ final class ActionController {
     /// against native Mac apps — if the frontmost app happens to be a VM
     /// window, forwarding this into the guest isn't attempted; pasting a
     /// screenshot there is a known, accepted limitation.
+    ///
+    /// Tagged with syntheticEventTag because this posts at the HID tap
+    /// level, which HotkeyManager's session-level tap also sees. Without
+    /// the tag, this real ⌘V fallback could match the user's own paste
+    /// hotkey (if they've bound it to bare ⌘V) and re-trigger Paste —
+    /// which, while the pasteboard still isn't text, fires this same
+    /// fallback again, forever, pegging the main thread until a real copy
+    /// puts text on the pasteboard and breaks the cycle.
     private func simulateCommandKeystroke(virtualKey: CGKeyCode) {
         let source = CGEventSource(stateID: .hidSystemState)
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: true),
@@ -89,6 +103,8 @@ final class ActionController {
         }
         down.flags = .maskCommand
         up.flags = .maskCommand
+        down.setIntegerValueField(.eventSourceUserData, value: Self.syntheticEventTag)
+        up.setIntegerValueField(.eventSourceUserData, value: Self.syntheticEventTag)
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
     }
